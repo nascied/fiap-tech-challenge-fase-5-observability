@@ -1,0 +1,88 @@
+mode: deployment
+
+image:
+  repository: "otel/opentelemetry-collector-contrib"
+
+command:
+  name: "otelcol-contrib"
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 512Mi
+
+ports:
+  jaeger-compact:
+    enabled: false
+  jaeger-thrift:
+    enabled: false
+  jaeger-grpc:
+    enabled: false
+  zipkin:
+    enabled: false
+  prometheus:
+    enabled: true
+    containerPort: 8889
+    servicePort: 8889
+    protocol: TCP
+
+serviceMonitor:
+  enabled: true
+  metricsEndpoints:
+    - port: prometheus
+
+# DD_API_KEY vem de um Secret provisionado fora deste repositório (CI/CD),
+# não versionar a chave em texto plano.
+extraEnvs:
+  - name: DD_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: datadog-secret
+        key: apiKey
+
+config:
+  receivers:
+    jaeger: null
+    zipkin: null
+
+  exporters:
+    debug: {}
+    prometheus:
+      endpoint: ${env:MY_POD_IP}:8889
+      # Sem isso, "service.name" vira o label "job" (padrão do exporter Prometheus do
+      # OTel para compatibilidade), que colide com o job definido pelo ServiceMonitor
+      # e é renomeado para "exported_job" — os dashboards (que filtram por
+      # "service_name") ficam vazios. Isso expõe todos os atributos de resource
+      # (incluindo service.name) como labels normais, gerando "service_name".
+      resource_to_telemetry_conversion:
+        enabled: true
+    # Loki 3.x aceita logs via OTLP nativamente em /otlp/v1/logs
+    otlphttp/loki:
+      logs_endpoint: http://loki:3100/otlp/v1/logs
+    # APM (Requisito 3) — recebe apenas traces; métricas e logs seguem
+    # exclusivamente para Prometheus/Loki. Trocar "site" se a conta Datadog
+    # não for US1 (ex.: datadoghq.eu, us3.datadoghq.com).
+    datadog:
+      api:
+        key: ${env:DD_API_KEY}
+        site: datadoghq.com
+
+  service:
+    pipelines:
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [datadog, debug]
+      metrics:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [prometheus, debug]
+      logs:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [otlphttp/loki, debug]

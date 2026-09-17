@@ -1,0 +1,199 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: solidary-tech-slo-burn-rate
+  namespace: monitoring
+  labels:
+    # ruleSelectorNilUsesHelmValues não foi sobrescrito em values/kube-prometheus-stack.yaml
+    # (default true no chart) -> o Prometheus operator só descobre PrometheusRule com este label,
+    # onde "kube-prometheus-stack" é o nome do release Helm (== nome da Application no ArgoCD).
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: solidarytech.slo.burnrate
+      rules:
+        # ---------------------------------------------------------------
+        # donation-service (Tier 0) — SLO disponibilidade 99,9% (budget 0,1%)
+        # ---------------------------------------------------------------
+        - alert: SLOErrorBudgetBurnFast
+          expr: |
+            (
+              sum(rate(http_server_request_duration_seconds_count{service_name="donation-service", http_response_status_code=~"5.."}[5m]))
+              /
+              sum(rate(http_server_request_duration_seconds_count{service_name="donation-service"}[5m]))
+            ) / 0.001 > 14.4
+          for: 2m
+          labels:
+            severity: critical
+            service: donation-service
+            tier: "0"
+            slo_type: availability
+          annotations:
+            summary: "donation-service queimando o error budget de disponibilidade rápido demais"
+            description: "Taxa de erro 5xx nos últimos 5m está consumindo o budget de 30d a mais de 14x o ritmo sustentável (nesse ritmo, o budget se esgotaria em poucos dias). Hot Path (Tier 0) — tratar como incidente ativo."
+            runbook_url: "../../fiap-tech-challenge-fase-5-observability/docs/itsm-aiops.md#resposta"
+            dashboard_url: "solidary-tech-sre (Grafana, seção donation-service)"
+
+        - alert: SLOErrorBudgetBurnSlow
+          expr: |
+            (
+              sum(rate(http_server_request_duration_seconds_count{service_name="donation-service", http_response_status_code=~"5.."}[1h]))
+              /
+              sum(rate(http_server_request_duration_seconds_count{service_name="donation-service"}[1h]))
+            ) / 0.001 > 6
+          for: 15m
+          labels:
+            severity: warning
+            service: donation-service
+            tier: "0"
+            slo_type: availability
+          annotations:
+            summary: "donation-service queimando o error budget de disponibilidade acima do ritmo sustentável"
+            description: "Taxa de erro 5xx na última 1h acima do ritmo que esgotaria o budget de 30d antes do fim da janela. Investigar antes que vire burn rápido."
+            runbook_url: "../../fiap-tech-challenge-fase-5-observability/docs/itsm-aiops.md#resposta"
+            dashboard_url: "solidary-tech-sre (Grafana, seção donation-service)"
+
+        - alert: SLOLatencyBudgetBurn
+          expr: |
+            (
+              1 - (
+                sum(rate(http_server_request_duration_seconds_bucket{service_name="donation-service", le="0.25"}[1h]))
+                /
+                sum(rate(http_server_request_duration_seconds_count{service_name="donation-service"}[1h]))
+              )
+            ) / 0.05 > 1
+          for: 15m
+          labels:
+            severity: warning
+            service: donation-service
+            tier: "0"
+            slo_type: latency
+          annotations:
+            summary: "donation-service acima da meta de latência (95% < 250ms)"
+            description: "Proporção de requisições acima de 250ms na última 1h já excede o que o SLO de latência tolera para se manter dentro dos 30d."
+            runbook_url: "../../fiap-tech-challenge-fase-5-observability/docs/itsm-aiops.md#resposta"
+            dashboard_url: "solidary-tech-sre (Grafana, seção donation-service)"
+
+        # ---------------------------------------------------------------
+        # ngo-service (Tier 1) — SLO disponibilidade 99,5% (budget 0,5%)
+        # ---------------------------------------------------------------
+        - alert: SLOErrorBudgetBurnFast
+          expr: |
+            (
+              sum(rate(http_server_request_duration_seconds_count{service_name="ngo-service", http_response_status_code=~"5.."}[5m]))
+              /
+              sum(rate(http_server_request_duration_seconds_count{service_name="ngo-service"}[5m]))
+            ) / 0.005 > 14.4
+          for: 2m
+          labels:
+            severity: warning
+            service: ngo-service
+            tier: "1"
+            slo_type: availability
+          annotations:
+            summary: "ngo-service queimando o error budget de disponibilidade rápido demais"
+            description: "Taxa de erro 5xx nos últimos 5m consumindo o budget de 30d rápido. Tier 1 — não bloqueia doação em andamento, mas priorizar."
+            runbook_url: "../../fiap-tech-challenge-fase-5-observability/docs/itsm-aiops.md#resposta"
+            dashboard_url: "solidary-tech-sre (Grafana, seção ngo-service)"
+
+        - alert: SLOErrorBudgetBurnSlow
+          expr: |
+            (
+              sum(rate(http_server_request_duration_seconds_count{service_name="ngo-service", http_response_status_code=~"5.."}[1h]))
+              /
+              sum(rate(http_server_request_duration_seconds_count{service_name="ngo-service"}[1h]))
+            ) / 0.005 > 6
+          for: 15m
+          labels:
+            severity: warning
+            service: ngo-service
+            tier: "1"
+            slo_type: availability
+          annotations:
+            summary: "ngo-service queimando o error budget de disponibilidade acima do ritmo sustentável"
+            description: "Taxa de erro 5xx na última 1h acima do ritmo sustentável do budget de 30d."
+            runbook_url: "../../fiap-tech-challenge-fase-5-observability/docs/itsm-aiops.md#resposta"
+            dashboard_url: "solidary-tech-sre (Grafana, seção ngo-service)"
+
+        - alert: SLOLatencyBudgetBurn
+          expr: |
+            (
+              1 - (
+                sum(rate(http_server_request_duration_seconds_bucket{service_name="ngo-service", le="0.5"}[1h]))
+                /
+                sum(rate(http_server_request_duration_seconds_count{service_name="ngo-service"}[1h]))
+              )
+            ) / 0.10 > 1
+          for: 15m
+          labels:
+            severity: warning
+            service: ngo-service
+            tier: "1"
+            slo_type: latency
+          annotations:
+            summary: "ngo-service acima da meta de latência (90% < 500ms)"
+            description: "Proporção de requisições acima de 500ms na última 1h já excede o que o SLO de latência tolera para se manter dentro dos 30d."
+            runbook_url: "../../fiap-tech-challenge-fase-5-observability/docs/itsm-aiops.md#resposta"
+            dashboard_url: "solidary-tech-sre (Grafana, seção ngo-service)"
+
+        # ---------------------------------------------------------------
+        # volunteer-service (Tier 1) — SLO disponibilidade 99,5% (budget 0,5%)
+        # ---------------------------------------------------------------
+        - alert: SLOErrorBudgetBurnFast
+          expr: |
+            (
+              sum(rate(http_server_request_duration_seconds_count{service_name="volunteer-service", http_response_status_code=~"5.."}[5m]))
+              /
+              sum(rate(http_server_request_duration_seconds_count{service_name="volunteer-service"}[5m]))
+            ) / 0.005 > 14.4
+          for: 2m
+          labels:
+            severity: warning
+            service: volunteer-service
+            tier: "1"
+            slo_type: availability
+          annotations:
+            summary: "volunteer-service queimando o error budget de disponibilidade rápido demais"
+            description: "Taxa de erro 5xx nos últimos 5m consumindo o budget de 30d rápido. Tier 1 — não bloqueia doação em andamento, mas priorizar."
+            runbook_url: "../../fiap-tech-challenge-fase-5-observability/docs/itsm-aiops.md#resposta"
+            dashboard_url: "solidary-tech-sre (Grafana, seção volunteer-service)"
+
+        - alert: SLOErrorBudgetBurnSlow
+          expr: |
+            (
+              sum(rate(http_server_request_duration_seconds_count{service_name="volunteer-service", http_response_status_code=~"5.."}[1h]))
+              /
+              sum(rate(http_server_request_duration_seconds_count{service_name="volunteer-service"}[1h]))
+            ) / 0.005 > 6
+          for: 15m
+          labels:
+            severity: warning
+            service: volunteer-service
+            tier: "1"
+            slo_type: availability
+          annotations:
+            summary: "volunteer-service queimando o error budget de disponibilidade acima do ritmo sustentável"
+            description: "Taxa de erro 5xx na última 1h acima do ritmo sustentável do budget de 30d."
+            runbook_url: "../../fiap-tech-challenge-fase-5-observability/docs/itsm-aiops.md#resposta"
+            dashboard_url: "solidary-tech-sre (Grafana, seção volunteer-service)"
+
+        - alert: SLOLatencyBudgetBurn
+          expr: |
+            (
+              1 - (
+                sum(rate(http_server_request_duration_seconds_bucket{service_name="volunteer-service", le="0.5"}[1h]))
+                /
+                sum(rate(http_server_request_duration_seconds_count{service_name="volunteer-service"}[1h]))
+              )
+            ) / 0.10 > 1
+          for: 15m
+          labels:
+            severity: warning
+            service: volunteer-service
+            tier: "1"
+            slo_type: latency
+          annotations:
+            summary: "volunteer-service acima da meta de latência (90% < 500ms)"
+            description: "Proporção de requisições acima de 500ms na última 1h já excede o que o SLO de latência tolera para se manter dentro dos 30d."
+            runbook_url: "../../fiap-tech-challenge-fase-5-observability/docs/itsm-aiops.md#resposta"
+            dashboard_url: "solidary-tech-sre (Grafana, seção volunteer-service)"

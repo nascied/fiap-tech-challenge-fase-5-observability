@@ -1,0 +1,60 @@
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1
+  storage:
+    type: filesystem
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    size: 10Gi
+    # Cluster não tem StorageClass default (gp2 existe mas não está marcada como default)
+    storageClass: gp2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Sem object storage (S3/GCS) no ambiente AWS Academy: usa filesystem local via PVC
+minio:
+  enabled: false
+
+# Cache em memcached é otimização opcional; desligado por recurso limitado no cluster (AWS Academy)
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
+
+# Sem gateway (nginx) na frente do Loki: Promtail, Grafana e o OTel Collector
+# apontam direto para o Service "loki" (SingleBinary), porta 3100.
+gateway:
+  enabled: false
+
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
+# Canary/test não agregam valor para os Requisitos 1 e 2 (coleta de logs/métricas)
+lokiCanary:
+  enabled: false
+test:
+  enabled: false

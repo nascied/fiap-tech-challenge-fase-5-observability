@@ -1,0 +1,12 @@
+config:
+  clients:
+    # gateway do Loki está desabilitado (deploymentMode: SingleBinary), aponta direto pro Service
+    - url: http://loki:3100/loki/api/v1/push
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi

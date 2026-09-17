@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: monitoring
+
+configMapGenerator:
+  - name: solidary-tech-overview-dashboard
+    files:
+      - solidary-tech-overview.json
+    options:
+      disableNameSuffixHash: true
+      labels:
+        grafana_dashboard: "1"
+  - name: solidary-tech-infra-dashboard
+    files:
+      - solidary-tech-infra.json
+    options:
+      disableNameSuffixHash: true
+      labels:
+        grafana_dashboard: "1"
+  - name: solidary-tech-sre-dashboard
+    files:
+      - solidary-tech-sre.json
+    options:
+      disableNameSuffixHash: true
+      labels:
+        grafana_dashboard: "1"
