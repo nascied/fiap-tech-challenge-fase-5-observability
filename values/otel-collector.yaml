@@ -1,5 +1,17 @@
 mode: deployment
 
+# Sem isso, o chart gera o nome "otel-collector-opentelemetry-collector"
+# (padrão do Helm: <release>-<chart>) pro Service/Deployment/etc — mas os 3
+# microsserviços (repo services/gitops) já apontam
+# OTEL_EXPORTER_OTLP_ENDPOINT pro nome curto "otel-collector.monitoring.svc.
+# cluster.local:4318". Bug real encontrado rodando contra o cluster: os pods
+# ficavam repetindo "dial tcp: lookup otel-collector.monitoring.svc.cluster.
+# local ... no such host" (não trava requisições, exportação de trace/métrica
+# é assíncrona, mas polui o log e nenhum dado chega no Datadog/Prometheus via
+# esse caminho). fullnameOverride força o nome curto, batendo com o que os
+# apps já esperam — mais simples que mudar o endpoint nos 3 charts.
+fullnameOverride: otel-collector
+
 image:
   repository: "otel/opentelemetry-collector-contrib"
 
